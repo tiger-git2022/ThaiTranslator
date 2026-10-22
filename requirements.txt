@@ -1,0 +1,10 @@
+PySide6==6.11.2
+PySide6-Fluent-Widgets==1.11.3
+PyAudioWPatch==0.2.12.8
+onnxruntime==1.30.0
+numpy==2.5.1
+scipy==1.18.1
+qrcode==8.2
+pillow==12.3.0
+comtypes==1.4.17
+pyinstaller==6.22.3

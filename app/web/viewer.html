@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3f3f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c1c1c" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>共享字幕</title>
+<link rel="icon" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon.png">
+<style>
+  :root {
+    --bg: #f3f3f3; --card: #ffffff; --text: #1a1a1a; --sub: #6b6b6b; --line: #e3e3e3;
+    --accent: #0067c0; --ok: #2e7d32; --bad: #c42b1c; --live: #8a8a8a;
+    --zh: 22px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1c1c1c; --card: #262626; --text: #f2f2f2; --sub: #a3a3a3; --line: #333;
+            --accent: #4cc2ff; --ok: #6ccb5f; --bad: #ff99a4; --live: #9a9a9a; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: "Microsoft YaHei UI", "PingFang SC", "Leelawadee UI", "Thonburi", system-ui, sans-serif;
+    -webkit-text-size-adjust: 100%; }
+  body { display: flex; flex-direction: column; }
+  header { position: sticky; top: 0; z-index: 2; background: var(--bg);
+    padding: calc(10px + env(safe-area-inset-top)) 16px 8px; border-bottom: 1px solid var(--line); }
+  .bar { display: flex; align-items: center; gap: 8px; }
+  .title { flex: 1; min-width: 0; font-weight: 600; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .status { font-size: 13px; color: var(--sub); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sub); flex: none; }
+  .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); }
+  button, select { font: inherit; font-size: 14px; color: var(--text); background: var(--card);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+  button.on { border-color: var(--accent); color: var(--accent); }
+  select { max-width: 100%; margin-top: 8px; width: 100%; }
+  main { flex: 1; overflow-y: auto; padding: 8px 16px calc(24px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; }
+  .seg { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .meta { font-size: 12px; color: var(--sub); margin-bottom: 4px; }
+  .zh { font-size: var(--zh); line-height: 1.45; word-break: break-word; }
+  .seg.live .zh { color: var(--live); }
+  .th { font-size: calc(var(--zh) * 0.62); line-height: 1.5; color: var(--sub); margin-top: 4px; word-break: break-word; }
+  body.hide-th .th { display: none; }
+  .empty { color: var(--sub); text-align: center; padding: 48px 16px; line-height: 1.7; }
+  .keybox { padding: 24px 16px; display: none; }
+  .keybox input { width: 100%; font-size: 16px; padding: 10px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--card); color: var(--text); margin: 8px 0; }
+  #jump { position: fixed; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom)); display: none;
+    background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 8px 14px; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="title" id="title">共享字幕</div>
+    <button id="smaller" aria-label="字号缩小">A−</button>
+    <button id="bigger" aria-label="字号放大">A+</button>
+    <button id="thai">原文</button>
+  </div>
+  <div class="status"><span class="dot" id="dot"></span><span id="state">连接中…</span></div>
+</header>
+<div class="keybox" id="keybox">
+  <div id="keymsg"></div>
+  <input id="keyinput" inputmode="numeric" autocomplete="off" placeholder="6 位观看码">
+  <button id="keysave">确定</button>
+</div>
+<main id="list"><div class="empty" id="empty">等待字幕…<br>主机开始共享后，这里会自动显示。</div></main>
+<button id="jump">↓ 最新</button>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+  };
+
+  // 观看码：二维码链接里带在 #k= 后面，存下来后从地址栏去掉（下次直接打开这个地址即可）
+  let key = store.get("tc_key", "");
+  const m = location.hash.match(/k=([^&]+)/);
+  if (m) { key = decodeURIComponent(m[1]); store.set("tc_key", key); history.replaceState(null, "", location.pathname); }
+
+  let size = parseInt(store.get("tc_size", "22"), 10);
+  let showTh = store.get("tc_th", "1") === "1";
+  const applyView = () => {
+    document.documentElement.style.setProperty("--zh", size + "px");
+    document.body.classList.toggle("hide-th", !showTh);
+    $("thai").classList.toggle("on", showTh);
+  };
+  $("smaller").onclick = () => { size = Math.max(14, size - 2); store.set("tc_size", size); applyView(); };
+  $("bigger").onclick = () => { size = Math.min(44, size + 2); store.set("tc_size", size); applyView(); };
+  $("thai").onclick = () => { showTh = !showTh; store.set("tc_th", showTh ? "1" : "0"); applyView(); };
+  applyView();
+
+  const list = $("list");
+  let segs = new Map();
+
+  function setState(text, kind) {
+    $("state").textContent = text;
+    $("dot").className = "dot" + (kind ? " " + kind : "");
+  }
+
+  function askKey(msg) {
+    $("keymsg").textContent = msg;
+    $("keybox").style.display = "block";
+    list.style.display = "none";
+    setState("需要观看码", "bad");
+  }
+  $("keysave").onclick = () => {
+    key = $("keyinput").value.trim();
+    store.set("tc_key", key);
+    $("keybox").style.display = "none";
+    list.style.display = "";
+    run();
+  };
+
+  const nearBottom = () => list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+  list.addEventListener("scroll", () => { $("jump").style.display = nearBottom() ? "none" : "block"; });
+  $("jump").onclick = () => { list.scrollTop = list.scrollHeight; };
+
+  const fmtTime = (t) => new Date(t * 1000).toTimeString().slice(0, 8);
+
+  function render(d) {
+    let item = segs.get(d.id);
+    if (!item) {
+      const el = document.createElement("div");
+      el.className = "seg";
+      el.innerHTML = '<div class="meta"></div><div class="zh"></div><div class="th"></div>';
+      item = { el, data: d };
+      segs.set(d.id, item);
+      let after = null;
+      for (const other of segs.values()) {
+        if (other !== item && other.data.index < d.index && (!after || other.data.index > after.data.index)) after = other;
+      }
+      if (after) after.el.after(el);
+      else $("empty").after(el);
+    }
+    item.data = d;
+    const done = d.final && d.zh_final && d.zh_src === d.text;
+    item.el.classList.toggle("live", !done);
+    item.el.querySelector(".meta").textContent = fmtTime(d.start) + "  " + (d.speaker || "") + (done ? "" : (d.final ? " · 翻译中" : " · 正在说"));
+    item.el.querySelector(".zh").textContent = d.zh || "…";
+    item.el.querySelector(".th").textContent = d.text || "";
+  }
+
+  function apply(items, reset) {
+    const stick = nearBottom();
+    if (reset) {
+      segs = new Map();
+      list.querySelectorAll(".seg").forEach((e) => e.remove());
+    }
+    items.sort((a, b) => a.index - b.index).forEach(render);
+    $("empty").style.display = segs.size ? "none" : "block";
+    if (stick || reset) list.scrollTop = list.scrollHeight;
+  }
+
+  // 主机没在共享时连不上，每 3 秒重试；主机重新共享后自动接上
+  async function run() {
+    if (!key) return askKey("请扫描主机软件上的二维码打开本页，或输入主机上显示的 6 位观看码：");
+    let fails = 0;
+    for (;;) {
+      let ended = false;
+      try {
+        const r = await fetch("/events", { headers: { Authorization: "Bearer " + key }, cache: "no-store" });
+        if (r.status === 401) return askKey("观看码不对（主机可能重置了观看码），请重新扫码或输入：");
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        setState("实时接收中", "ok");
+        fails = 0;
+        const reader = r.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.indexOf("\n\n")) >= 0) {
+            const block = buf.slice(0, i); buf = buf.slice(i + 2);
+            let kind = "", data = "";
+            for (const line of block.split("\n")) {
+              if (line.startsWith("event: ")) kind = line.slice(7);
+              else if (line.startsWith("data: ")) data += line.slice(6);
+            }
+            if (!kind) continue;
+            const obj = data ? JSON.parse(data) : {};
+            if (kind === "snapshot") { $("title").textContent = obj.name || "共享字幕"; document.title = obj.name || "共享字幕"; apply(obj.segments || [], true); }
+            else if (kind === "update") apply(obj.segments || [], false);
+            else if (kind === "end") ended = true;
+          }
+        }
+      } catch (e) {
+        fails++;
+      }
+      if (ended) setState("主机已停止共享，重新共享后会自动接上");
+      else if (fails) setState(segs.size ? "连不上主机，正在重试…（主机停止共享或网络断开）" : "连不上主机，正在重试…", "bad");
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  }
+  run();
+})();
+</script>
+</body>
+</html>

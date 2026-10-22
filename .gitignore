@@ -1,0 +1,35 @@
+# 打包产物（由 build.py / GitHub Actions 生成，不进仓库）
+build/
+dist/
+parts*/
+*.spec
+*.zip
+*.zip.[0-9][0-9][0-9]
+*.exe
+
+# Python 缓存和虚拟环境
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# 密钥、个人配置、日志、会议记录（软件运行时写在 %APPDATA%\ThaiCaption，这里防止误拷进来）
+.env
+.env.*
+*.key
+api-key.txt
+*api_key*
+config.json
+settings.json
+logs/
+*.log
+transcripts/
+
+# 编辑器 / 系统文件
+.vscode/
+.idea/
+.claude/
+Thumbs.db
+desktop.ini
+.DS_Store

@@ -1,0 +1,74 @@
+name: 打包发布
+
+# 推送 v* 标签（如 v1.5.7）时：在 Windows 上用 build.py 打包，并发布到 Releases。
+# 手动运行（Actions 页面 → Run workflow）时：只打包，产物在本次运行的 Artifacts 里下载，不发布。
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: 安装依赖
+        run: python -m pip install -r requirements.txt
+
+      - name: 读取版本号
+        id: ver
+        shell: pwsh
+        run: |
+          $v = python -c "import re,pathlib;print(re.search(r'APP_VERSION = \"([^\"]+)\"', pathlib.Path('app/main.py').read_text(encoding='utf-8')).group(1))"
+          "version=$v" >> $env:GITHUB_OUTPUT
+          if ("${{ github.ref_type }}" -eq "tag" -and "${{ github.ref_name }}" -ne "v$v") {
+            Write-Error "标签 ${{ github.ref_name }} 和 app/main.py 里的 APP_VERSION=$v 不一致"
+            exit 1
+          }
+
+      - name: 打包文件夹版
+        run: python build.py
+
+      - name: 打包单文件版
+        run: python build.py --onefile
+
+      - name: 整理发布文件
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          New-Item -ItemType Directory -Force out | Out-Null
+          # 文件夹版：zip 里是“泰语字幕翻译”文件夹；Release 文件名用英文，避免 GitHub 把中文名改掉
+          python -c "import shutil; shutil.make_archive('out/ThaiCaption-$v-windows-x64', 'zip', 'dist', '泰语字幕翻译')"
+          Copy-Item "dist/泰语字幕翻译-$v-单文件.exe" "out/ThaiCaption-$v-windows-x64-onefile.exe"
+          Get-ChildItem out | ForEach-Object { "{0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+          # Release 说明：取 CHANGELOG.md 里本版本那一节
+          python .github/changelog_section.py $v > out/notes.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ThaiCaption-${{ steps.ver.outputs.version }}
+          path: |
+            out/*.zip
+            out/*.exe
+
+      - name: 发布到 Releases
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 泰语字幕翻译 v${{ steps.ver.outputs.version }}
+          body_path: out/notes.md
+          files: |
+            out/*.zip
+            out/*.exe
