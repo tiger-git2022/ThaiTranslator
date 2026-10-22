@@ -31,7 +31,7 @@ Teams 字幕：Teams 桌面版字幕 ──UI Automation 直接读取──┐
 
 ### Mac 版
 
-支持 macOS 12 及以上。Mac 版目前只能读取 **Teams 网页版**的字幕：用 Chrome 或 Edge 打开 teams.microsoft.com 开会，第一次用时点“安装扩展”装好浏览器扩展。翻译、置顶浮窗、局域网共享、观看共享都和 Windows 版一样。Teams 桌面版字幕和语音识别暂时只有 Windows 版支持。
+支持 macOS 14（Sonoma）及以上。Mac 版目前只能读取 **Teams 网页版**的字幕：用 Chrome 或 Edge 打开 teams.microsoft.com 开会，第一次用时点“安装扩展”装好浏览器扩展。翻译、置顶浮窗、局域网共享、观看共享都和 Windows 版一样。Teams 桌面版字幕和语音识别暂时只有 Windows 版支持。
 
 软件没有苹果开发者签名，第一次打开要多点一步：
 

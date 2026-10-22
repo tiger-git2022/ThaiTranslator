@@ -19,7 +19,7 @@ if plat.HAS_BACKDROP:
     from qframelesswindow import WindowEffect
 
 log = logging.getLogger("overlay")
-FONTS = "'Microsoft YaHei UI','Leelawadee UI','Segoe UI',sans-serif"
+FONTS = "'Microsoft YaHei UI','Leelawadee UI','Segoe UI','PingFang SC','Thonburi',sans-serif"
 PAD = 18
 
 

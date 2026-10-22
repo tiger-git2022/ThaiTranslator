@@ -94,7 +94,7 @@ def mac():
     info = plistlib.loads(plist.read_bytes())
     info.update({
         "CFBundleShortVersionString": version(), "CFBundleVersion": version(),
-        "CFBundleDisplayName": NAME, "LSMinimumSystemVersion": "12.0", "NSHighResolutionCapable": True,
+        "CFBundleDisplayName": NAME, "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True,
         # 局域网共享、查找共享主机要用本地网络（macOS 15 起会弹窗询问）
         "NSLocalNetworkUsageDescription": "用于在局域网里共享字幕、查找正在共享的电脑。",
     })
