@@ -47,14 +47,10 @@ jobs:
       - name: 整理发布文件
         shell: pwsh
         run: |
-          $v = "${{ steps.ver.outputs.version }}"
-          New-Item -ItemType Directory -Force out | Out-Null
-          # 文件夹版：zip 里是“泰语字幕翻译”文件夹；Release 文件名用英文，避免 GitHub 把中文名改掉
-          python -c "import shutil; shutil.make_archive('out/ThaiCaption-$v-windows-x64', 'zip', 'dist', '泰语字幕翻译')"
-          Copy-Item "dist/泰语字幕翻译-$v-单文件.exe" "out/ThaiCaption-$v-windows-x64-onefile.exe"
-          Get-ChildItem out | ForEach-Object { "{0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+          # 文件夹版 zip + 单文件版 exe，文件名见 .github/package.py
+          python .github/package.py
           # Release 说明：取 CHANGELOG.md 里本版本那一节
-          python .github/changelog_section.py $v > out/notes.md
+          python .github/changelog_section.py ${{ steps.ver.outputs.version }} out/notes.md
 
       - uses: actions/upload-artifact@v5
         with:
