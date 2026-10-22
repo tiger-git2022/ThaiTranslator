@@ -9,3 +9,5 @@ comtypes==1.4.17; sys_platform == "win32"
 PyAudioWPatch==0.2.12.8; sys_platform == "win32"
 onnxruntime==1.30.0; sys_platform == "win32"
 scipy==1.18.1; sys_platform == "win32"
+# 托盘菜单的亚克力模糊（和 scipy、pillow 一起用）
+colorthief==0.2.1; sys_platform == "win32"
