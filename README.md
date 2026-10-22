@@ -1,7 +1,7 @@
 # 泰语字幕翻译
 
-[![最新版本](https://img.shields.io/github/v/release/tiger-git2022/ThaiCaption?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC)](https://github.com/tiger-git2022/ThaiCaption/releases/latest)
-[![打包发布](https://github.com/tiger-git2022/ThaiCaption/actions/workflows/release.yml/badge.svg)](https://github.com/tiger-git2022/ThaiCaption/actions/workflows/release.yml)
+[![最新版本](https://img.shields.io/github/v/release/tiger-git2022/ThaiTranslator?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC)](https://github.com/tiger-git2022/ThaiTranslator/releases/latest)
+[![打包发布](https://github.com/tiger-git2022/ThaiTranslator/actions/workflows/release.yml/badge.svg)](https://github.com/tiger-git2022/ThaiTranslator/actions/workflows/release.yml)
 ![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%2010%20%2F%2011-blue)
 
 把泰语会议内容实时翻译成中文：窗口里显示双语记录，屏幕上叠加一个置顶字幕浮窗，还可以共享给同一局域网里的手机和电脑。翻译和语音识别都调用运行模型的电脑（tiger-pc）上的 llama-swap，其他电脑通过 Tailscale 远程使用。
@@ -16,7 +16,7 @@ Teams 字幕：Teams 桌面版字幕 ──UI Automation 直接读取──┐
 
 ## 下载
 
-到 [Releases](https://github.com/tiger-git2022/ThaiCaption/releases/latest) 下载最新版本，每个版本有两个文件：
+到 [Releases](https://github.com/tiger-git2022/ThaiTranslator/releases/latest) 下载最新版本，每个版本有两个文件：
 
 | 文件 | 说明 |
 | --- | --- |
