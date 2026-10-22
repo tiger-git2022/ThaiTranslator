@@ -14,7 +14,8 @@ import re
 import sys
 import threading
 import time
-from ctypes import wintypes
+if sys.platform == "win32":
+    from ctypes import wintypes
 
 from PySide6.QtCore import QObject, Signal
 
@@ -52,24 +53,25 @@ def speaker_key(name):
 
 # 用自己的 WinDLL 实例并写明参数、返回类型：64 位下句柄按默认的 int 处理会被截断，
 # 也不和其他库共用 ctypes.windll 上的函数设置
-_k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-_k32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-_k32.OpenProcess.restype = wintypes.HANDLE
-_k32.QueryFullProcessImageNameW.argtypes = (wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
-                                            ctypes.POINTER(wintypes.DWORD))
-_k32.QueryFullProcessImageNameW.restype = wintypes.BOOL
-_k32.CloseHandle.argtypes = (wintypes.HANDLE,)
-_k32.CloseHandle.restype = wintypes.BOOL
-_u32 = ctypes.WinDLL("user32", use_last_error=True)
-_WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-_u32.EnumWindows.argtypes = (_WNDENUMPROC, wintypes.LPARAM)
-_u32.EnumWindows.restype = wintypes.BOOL
-_u32.IsWindowVisible.argtypes = (wintypes.HWND,)
-_u32.IsWindowVisible.restype = wintypes.BOOL
-_u32.GetWindowThreadProcessId.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
-_u32.GetWindowThreadProcessId.restype = wintypes.DWORD
-_u32.GetWindowTextW.argtypes = (wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
-_u32.GetWindowTextW.restype = ctypes.c_int
+if sys.platform == "win32":   # Mac 上只用到 speaker_key，不加载 Windows 接口
+    _k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _k32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    _k32.OpenProcess.restype = wintypes.HANDLE
+    _k32.QueryFullProcessImageNameW.argtypes = (wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
+                                                ctypes.POINTER(wintypes.DWORD))
+    _k32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+    _k32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    _k32.CloseHandle.restype = wintypes.BOOL
+    _u32 = ctypes.WinDLL("user32", use_last_error=True)
+    _WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    _u32.EnumWindows.argtypes = (_WNDENUMPROC, wintypes.LPARAM)
+    _u32.EnumWindows.restype = wintypes.BOOL
+    _u32.IsWindowVisible.argtypes = (wintypes.HWND,)
+    _u32.IsWindowVisible.restype = wintypes.BOOL
+    _u32.GetWindowThreadProcessId.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
+    _u32.GetWindowThreadProcessId.restype = wintypes.DWORD
+    _u32.GetWindowTextW.argtypes = (wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
+    _u32.GetWindowTextW.restype = ctypes.c_int
 
 
 def _exe_name(pid, cache={}):
