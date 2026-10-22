@@ -59,6 +59,14 @@ def steps():
         win.switchTo(win.help)
         win._refresh_status()
         print("状态栏：", win.ext_label.text())
+        menu = win.tray.contextMenu()   # 托盘菜单能打开；Windows 上是亚克力样式且模糊依赖齐全
+        if plat.HAS_BACKDROP:
+            from qfluentwidgets.common import image_utils  # noqa: F401  缺 scipy / colorthief 时这里报错
+            if type(menu).__name__ != "AcrylicSystemTrayMenu":
+                raise RuntimeError(f"托盘菜单不是亚克力样式：{type(menu).__name__}")
+        menu.exec(win.geometry().center())
+        QTimer.singleShot(300, menu.close)
+        print("托盘菜单：", type(menu).__name__)
     except Exception:  # noqa: BLE001
         errors.append(traceback.format_exc())
 

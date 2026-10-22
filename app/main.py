@@ -51,7 +51,7 @@ else:
             pass
 
 APP_NAME = "泰语字幕翻译"
-APP_VERSION = "1.5.8"
+APP_VERSION = "1.5.9"
 log = logging.getLogger("app")
 INSTANCE = "ThaiCaption-instance"
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
@@ -637,7 +637,12 @@ class MainWindow(FluentWindow):
     def _build_tray(self):
         self.tray = QSystemTrayIcon(app_icon(), self)
         self.tray.setToolTip(APP_NAME)
-        menu = SystemTrayMenu(parent=self)
+        # Windows 上托盘右键菜单用亚克力样式（截取菜单后面的屏幕做模糊，半透明圆角）；Mac 用普通的
+        if plat.HAS_BACKDROP:
+            from qfluentwidgets.components.material import AcrylicSystemTrayMenu
+            menu = AcrylicSystemTrayMenu(parent=self)
+        else:
+            menu = SystemTrayMenu(parent=self)
         self.act_overlay = Action(FIF.VIEW, "显示 / 隐藏浮窗",
                                   triggered=lambda: self.set_option("overlay_visible", not self.cfg["overlay_visible"]))
         self.act_through = Action(FIF.TRANSPARENT, "取消鼠标穿透",
