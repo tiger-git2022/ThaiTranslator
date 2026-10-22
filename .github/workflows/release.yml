@@ -84,17 +84,14 @@ jobs:
       - name: 安装依赖
         run: python -m pip install -r requirements.txt
 
+      # Mac 的 CI 机器有图形界面；无边框窗口要用到真实的 Cocoa 窗口，不能用 offscreen
       - name: 启动自检（源码）
-        env:
-          QT_QPA_PLATFORM: offscreen
         run: python .github/smoke_test.py
 
       - name: 打包 .app
         run: python build.py
 
       - name: 启动自检（打包后的 .app 能跑起来）
-        env:
-          QT_QPA_PLATFORM: offscreen
         run: |
           export THAICAPTION_HOME="$RUNNER_TEMP/thaicaption-home"
           "dist/泰语字幕翻译.app/Contents/MacOS/泰语字幕翻译" --minimized &

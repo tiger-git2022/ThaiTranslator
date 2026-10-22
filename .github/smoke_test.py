@@ -2,6 +2,7 @@
 python .github/smoke_test.py            # 按当前系统
 python .github/smoke_test.py --as-mac   # 在 Windows 上按 Mac 版的功能开关跑一遍界面
 在 CI 里设 QT_QPA_PLATFORM=offscreen，不需要显示器。"""
+import faulthandler
 import os
 import sys
 import tempfile
@@ -17,6 +18,7 @@ import plat  # noqa: E402
 if "--as-mac" in sys.argv:
     plat.HAS_TEAMS_DESKTOP = plat.HAS_ASR = plat.HAS_BACKDROP = False
 
+faulthandler.enable()   # 原生代码崩溃（段错误）时也打印出是哪一行
 errors = []
 
 
