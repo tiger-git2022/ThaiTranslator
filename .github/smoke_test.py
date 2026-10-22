@@ -18,7 +18,15 @@ if "--as-mac" in sys.argv:
     plat.HAS_TEAMS_DESKTOP = plat.HAS_ASR = plat.HAS_BACKDROP = False
 
 errors = []
-sys.excepthook = lambda *exc: errors.append("".join(traceback.format_exception(*exc)))
+
+
+def hook(*exc):
+    text = "".join(traceback.format_exception(*exc))
+    errors.append(text)
+    print(text, file=sys.stderr, flush=True)
+
+
+sys.excepthook = hook
 
 from PySide6.QtCore import QTimer  # noqa: E402
 from PySide6.QtNetwork import QLocalServer  # noqa: E402
