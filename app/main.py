@@ -366,6 +366,7 @@ class MainWindow(FluentWindow):
                                      self.mode_box))
         self.url_edit = LineEdit()
         self.url_edit.setText(cfg["api_base"])
+        self.url_edit.setPlaceholderText("http://<tiger-pc 的 Tailscale 地址>:8080/v1")
         self.url_edit.setFixedWidth(320)
         self.url_edit.editingFinished.connect(lambda: self.set_option("api_base", self.url_edit.text().strip()))
         self.key_edit = PasswordLineEdit()

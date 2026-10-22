@@ -12,7 +12,7 @@ log = logging.getLogger("config")
 LOCAL_KEY_FILE = Path(r"E:\llama.cpp\api-key.txt")
 
 DEFAULTS = {
-    "api_base": "http://100.95.101.79:8080/v1",
+    "api_base": "",              # 本地模型服务地址，例如 http://<tiger-pc 的 Tailscale 地址>:8080/v1，第一次使用时在设置里填
     "api_key": "",
     "model": "hymt2",
     "translate_mode": "local",  # 翻译走哪里：local = 本地 llama-swap；online = 线上 API

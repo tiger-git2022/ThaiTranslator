@@ -86,7 +86,8 @@ class ModelKeeper(QObject):
             except urllib.error.HTTPError as e:
                 err = "密钥不正确" if e.code == 401 else f"HTTP {e.code}"
             except Exception:  # noqa: BLE001
-                err = "连不上 tiger-pc 的模型服务（llama-swap 没启动，或本机没连 Tailscale）"
+                err = ("还没在设置里填本地模型服务的接口地址" if not self.cfg.get("api_base")
+                       else "连不上 tiger-pc 的模型服务（llama-swap 没启动，或本机没连 Tailscale）")
             now = time.monotonic()
             with self.lock:
                 needed, busy = set(self.needed), set(self.busy)
