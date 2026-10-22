@@ -1,6 +1,6 @@
 name: 打包发布
 
-# 推送 v* 标签（如 v1.5.7）时：在 Windows 上用 build.py 打包，并发布到 Releases。
+# 推送 v* 标签（如 v1.5.8）时：分别在 Windows 和 Mac 上打包，再一起发布到 Releases。
 # 手动运行（Actions 页面 → Run workflow）时：只打包，产物在本次运行的 Artifacts 里下载，不发布。
 on:
   push:
@@ -10,12 +10,13 @@ on:
 permissions:
   contents: write
 
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
-    env:
-      PYTHONUTF8: "1"
-      PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v5
 
@@ -38,6 +39,13 @@ jobs:
             exit 1
           }
 
+      - name: 启动自检
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python .github/smoke_test.py
+          python .github/smoke_test.py --as-mac
+
       - name: 打包文件夹版
         run: python build.py
 
@@ -45,25 +53,95 @@ jobs:
         run: python build.py --onefile
 
       - name: 整理发布文件
-        shell: pwsh
-        run: |
-          # 文件夹版 zip + 单文件版 exe，文件名见 .github/package.py
-          python .github/package.py
-          # Release 说明：取 CHANGELOG.md 里本版本那一节
-          python .github/changelog_section.py ${{ steps.ver.outputs.version }} out/notes.md
+        # 文件夹版 zip + 单文件版 exe，文件名见 .github/package.py
+        run: python .github/package.py
 
       - uses: actions/upload-artifact@v5
         with:
-          name: ThaiCaption-${{ steps.ver.outputs.version }}
+          name: windows
           path: |
             out/*.zip
             out/*.exe
 
+  mac:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest       # Apple 芯片（M1 及以后）
+            arch: arm64
+          - runner: macos-15-intel     # Intel 芯片
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: 安装依赖
+        run: python -m pip install -r requirements.txt
+
+      - name: 启动自检（源码）
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python .github/smoke_test.py
+
+      - name: 打包 .app
+        run: python build.py
+
+      - name: 启动自检（打包后的 .app 能跑起来）
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          export THAICAPTION_HOME="$RUNNER_TEMP/thaicaption-home"
+          "dist/泰语字幕翻译.app/Contents/MacOS/泰语字幕翻译" --minimized &
+          pid=$!
+          sleep 10
+          if ! kill -0 $pid 2>/dev/null; then
+            echo "打包后的程序启动后退出了"; cat "$THAICAPTION_HOME"/logs/*.log || true; exit 1
+          fi
+          kill $pid
+          grep -h "启动" "$THAICAPTION_HOME"/logs/*.log
+          if grep -h "ERROR\|Traceback" "$THAICAPTION_HOME"/logs/*.log; then exit 1; fi
+
+      - name: 整理发布文件
+        run: |
+          v=$(python -c "import build; print(build.version())")
+          mkdir -p out
+          # ditto 打包能保留 .app 里的符号链接和签名
+          ditto -c -k --keepParent "dist/泰语字幕翻译.app" "out/ThaiCaption-$v-macos-${{ matrix.arch }}.zip"
+          ls -lh out
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: mac-${{ matrix.arch }}
+          path: out/*.zip
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v5
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: 生成 Release 说明
+        run: |
+          ls -lh out
+          # 取 CHANGELOG.md 里本版本那一节
+          python3 .github/changelog_section.py "${GITHUB_REF_NAME#v}" out/notes.md
+
       - name: 发布到 Releases
-        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          name: 泰语字幕翻译 v${{ steps.ver.outputs.version }}
+          name: 泰语字幕翻译 ${{ github.ref_name }}
           body_path: out/notes.md
           files: |
             out/*.zip

@@ -74,7 +74,39 @@ def onefile():
     print(f"\n完成：{ROOT / 'dist' / (name + '.exe')}")
 
 
+def mac():
+    """Mac 版：dist/泰语字幕翻译.app（只有浏览器扩展字幕 + 翻译 + 浮窗 + 共享，见 app/plat.py）。
+    没有苹果开发者签名，只做免费的本机签名（ad-hoc），第一次打开要在“隐私与安全性”里点“仍要打开”。"""
+    import plistlib
+    subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--windowed", "--name", NAME,
+                    "--icon", str(ROOT / "assets" / "app.png"), "--osx-bundle-identifier", "io.github.tiger-git2022.thaitranslator",
+                    "--distpath", str(ROOT / "dist"), "--workpath", str(ROOT / "build"),
+                    "--specpath", str(ROOT / "build"), "--paths", str(ROOT / "app"),
+                    "--exclude-module", "comtypes", "--exclude-module", "pyaudiowpatch",
+                    "--exclude-module", "onnxruntime", "--exclude-module", "scipy",
+                    "--add-data", f"{ROOT / 'app' / 'web'}:web",
+                    "--add-data", f"{ROOT / 'app' / 'models' / 'english_words.txt'}:models",
+                    "--add-data", f"{ROOT / 'assets' / 'app.png'}:assets",
+                    "--add-data", f"{ROOT / 'extension'}:extension",
+                    str(ROOT / "app" / "main.py")], check=True)
+    out = ROOT / "dist" / f"{NAME}.app"
+    plist = out / "Contents" / "Info.plist"
+    info = plistlib.loads(plist.read_bytes())
+    info.update({
+        "CFBundleShortVersionString": version(), "CFBundleVersion": version(),
+        "CFBundleDisplayName": NAME, "LSMinimumSystemVersion": "12.0", "NSHighResolutionCapable": True,
+        # 局域网共享、查找共享主机要用本地网络（macOS 15 起会弹窗询问）
+        "NSLocalNetworkUsageDescription": "用于在局域网里共享字幕、查找正在共享的电脑。",
+    })
+    plist.write_bytes(plistlib.dumps(info))
+    # 改了 Info.plist 要重新签名，否则 Apple 芯片的 Mac 会提示“已损坏”
+    subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(out)], check=True)
+    print(f"\n完成：{out}")
+
+
 def main():
+    if sys.platform == "darwin":
+        return mac()
     if "--onefile" in sys.argv:
         return onefile()
     make_icon()

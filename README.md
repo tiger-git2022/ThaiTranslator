@@ -2,7 +2,7 @@
 
 [![最新版本](https://img.shields.io/github/v/release/tiger-git2022/ThaiTranslator?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC)](https://github.com/tiger-git2022/ThaiTranslator/releases/latest)
 [![打包发布](https://github.com/tiger-git2022/ThaiTranslator/actions/workflows/release.yml/badge.svg)](https://github.com/tiger-git2022/ThaiTranslator/actions/workflows/release.yml)
-![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%2010%20%2F%2011-blue)
+![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%20%7C%20macOS-blue)
 
 把泰语会议内容实时翻译成中文：窗口里显示双语记录，屏幕上叠加一个置顶字幕浮窗，还可以共享给同一局域网里的手机和电脑。翻译和语音识别都调用运行模型的电脑（tiger-pc）上的 llama-swap，其他电脑通过 Tailscale 远程使用。
 
@@ -16,14 +16,34 @@ Teams 字幕：Teams 桌面版字幕 ──UI Automation 直接读取──┐
 
 ## 下载
 
-到 [Releases](https://github.com/tiger-git2022/ThaiTranslator/releases/latest) 下载最新版本，每个版本有两个文件：
+到 [Releases](https://github.com/tiger-git2022/ThaiTranslator/releases/latest) 下载最新版本：
 
 | 文件 | 说明 |
 | --- | --- |
-| `ThaiCaption-版本号-windows-x64.zip` | **推荐**。解压后打开 `泰语字幕翻译` 文件夹，双击 `泰语字幕翻译.exe`。启动快，浏览器扩展也在里面。 |
-| `ThaiCaption-版本号-windows-x64-onefile.exe` | 单文件版，下载即用。每次启动要先解压到临时目录，会慢几秒。 |
+| `ThaiCaption-版本号-windows-x64.zip` | **Windows 推荐**。解压后打开 `泰语字幕翻译` 文件夹，双击 `泰语字幕翻译.exe`。启动快，浏览器扩展也在里面。 |
+| `ThaiCaption-版本号-windows-x64-onefile.exe` | Windows 单文件版，下载即用。每次启动要先解压到临时目录，会慢几秒。 |
+| `ThaiCaption-版本号-macos-arm64.zip` | Mac（Apple 芯片：M1、M2、M3、M4…）。 |
+| `ThaiCaption-版本号-macos-x64.zip` | Mac（Intel 芯片）。不确定是哪种：点屏幕左上角苹果菜单 →“关于本机”，看“芯片”或“处理器”。 |
 
-只支持 Windows 10 / 11（64 位）。首次运行如果 SmartScreen 拦截，点“更多信息 → 仍要运行”。各版本改了什么见 [更新日志](CHANGELOG.md)。
+**Windows**：支持 Windows 10 / 11（64 位）。首次运行如果 SmartScreen 拦截，点“更多信息 → 仍要运行”。
+
+各版本改了什么见 [更新日志](CHANGELOG.md)。
+
+### Mac 版
+
+支持 macOS 12 及以上。Mac 版目前只能读取 **Teams 网页版**的字幕：用 Chrome 或 Edge 打开 teams.microsoft.com 开会，第一次用时点“安装扩展”装好浏览器扩展。翻译、置顶浮窗、局域网共享、观看共享都和 Windows 版一样。Teams 桌面版字幕和语音识别暂时只有 Windows 版支持。
+
+软件没有苹果开发者签名，第一次打开要多点一步：
+
+1. 解压后把 `泰语字幕翻译.app` 拖进“应用程序”文件夹，双击打开，看到“无法验证开发者”的提示时点“完成”。
+2. 打开“系统设置 → 隐私与安全性”，拉到最下面，点“仍要打开”，再输一次开机密码。之后就能正常双击打开了。
+3. 如果提示“已损坏，无法打开”，打开“终端”，粘贴下面这行并回车，再双击打开：
+
+   ```
+   xattr -dr com.apple.quarantine /Applications/泰语字幕翻译.app
+   ```
+
+第一次开始共享时，macOS 会问是否允许访问本地网络，要点“允许”。配置、记录和日志在 `~/Library/Application Support/ThaiCaption`。
 
 ## 在新电脑上使用（负责抓字幕和翻译的“主机”）
 
@@ -83,7 +103,7 @@ Teams 字幕：Teams 桌面版字幕 ──UI Automation 直接读取──┐
 ```
 pip install -r requirements.txt   # 安装依赖（PySide6、qfluentwidgets、pyaudiowpatch、onnxruntime 等）
 python app\main.py         # 直接运行
-python build.py            # 打包到 dist\泰语字幕翻译\
+python build.py            # 打包到 dist\泰语字幕翻译\（在 Mac 上运行则打包成 dist/泰语字幕翻译.app）
 python build.py --onefile  # 单文件版 dist\泰语字幕翻译-版本号-单文件.exe
 ```
 
@@ -95,6 +115,6 @@ Teams 桌面版字幕的读取在 `app\teams_desktop.py`：找 `ms-teams.exe` / 
 
 1. 改 `app\main.py` 里的 `APP_VERSION`，在 `CHANGELOG.md` 顶部加一节 `## v新版本号`，写这次改了什么。
 2. 提交后打标签并推送：`git tag v1.5.8`，再 `git push origin main v1.5.8`。
-3. GitHub Actions 会在 Windows 上打包两个版本，自动发布到 Releases，说明取自 `CHANGELOG.md`。标签和 `APP_VERSION` 不一致时会直接报错，不发布。
+3. GitHub Actions 会在 Windows 和 Mac 上分别打包、做启动自检，自动发布到 Releases，说明取自 `CHANGELOG.md`。标签和 `APP_VERSION` 不一致时会直接报错，不发布。
 
 只想试打包、不发布时，在 Actions 页面手动运行“打包发布”，产物在那次运行的 Artifacts 里下载。

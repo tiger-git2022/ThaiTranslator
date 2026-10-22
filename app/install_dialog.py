@@ -6,7 +6,6 @@
 import os
 import shutil
 import subprocess
-import winreg
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
@@ -15,8 +14,13 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
 from qfluentwidgets import (BodyLabel, CaptionLabel, ComboBox, FluentIcon as FIF, InfoBar, InfoBarPosition,
                             MessageBoxBase, PushButton, SimpleCardWidget, StrongBodyLabel, SubtitleLabel)
 
+import plat
+
+if plat.IS_WIN:
+    import winreg
+
 EXT_URL = "chrome://extensions"   # Edge 也认这个地址（会自动跳到 edge://extensions）
-INSTALL_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "ThaiCaption" / "extension"
+INSTALL_DIR = plat.local_data_dir() / "extension"
 GREY = (QColor("#606060"), QColor("#a0a0a0"))
 
 
@@ -28,6 +32,10 @@ def sync_extension(bundled):
 
 
 def find_browsers():
+    if plat.IS_MAC:
+        return find_browsers_mac()
+    if not plat.IS_WIN:
+        return []
     found = []
 
     def add(name, path):
@@ -56,6 +64,17 @@ def find_browsers():
             add("Google Chrome", Path(base) / "Google" / "Chrome" / "Application" / "chrome.exe")
             add("Microsoft Edge", Path(base) / "Microsoft" / "Edge" / "Application" / "msedge.exe")
     found.sort(key=lambda b: (b[0] != "Google Chrome", b[0] == "Microsoft Edge"))   # Chrome 优先，Edge 最后
+    return found
+
+
+def find_browsers_mac():
+    """Mac 上的浏览器是 .app 文件夹，用 open -a 打开。"""
+    found = []
+    for name, app in (("Google Chrome", "Google Chrome.app"), ("Microsoft Edge", "Microsoft Edge.app")):
+        for base in (Path("/Applications"), Path.home() / "Applications"):
+            if (base / app).is_dir():
+                found.append((name, str(base / app)))
+                break
     return found
 
 
@@ -102,18 +121,20 @@ class InstallDialog(MessageBoxBase):
         open_btn.setEnabled(bool(self.browsers))
         self.viewLayout.addWidget(step_card(
             "① 打开扩展管理页",
-            f"点按钮会打开浏览器，并把 {EXT_URL} 复制好。在浏览器地址栏按 Ctrl+V，再按回车。",
+            f"点按钮会打开浏览器，并把 {EXT_URL} 复制好。在浏览器地址栏按 {plat.MOD}V，再按回车。",
             self.browser_box, open_btn))
         self.viewLayout.addWidget(step_card(
             "② 打开“开发者模式”", "扩展管理页右上角（Edge 在左下角）的“开发者模式 / 开发人员模式”开关，打开它。"))
         copy_btn = PushButton(FIF.COPY, "复制扩展路径")
         copy_btn.clicked.connect(self.copy_path)
-        show_btn = PushButton(FIF.FOLDER, "在文件夹中显示")
-        show_btn.clicked.connect(lambda: subprocess.Popen(["explorer", "/select,", str(self.ext_dir)]))
+        show_btn = PushButton(FIF.FOLDER, "在访达中显示" if plat.IS_MAC else "在文件夹中显示")
+        show_btn.clicked.connect(lambda: plat.reveal(self.ext_dir))
+        load_tip = ("点“加载已解压的扩展程序”。在弹出的窗口里按 ⌘⇧G，粘贴路径并回车，再点“选择”。"
+                    if plat.IS_MAC else
+                    "点“加载已解压的扩展程序”。在弹出窗口顶部的地址栏按 Ctrl+V 粘贴路径并回车，再点“选择文件夹”。")
         self.viewLayout.addWidget(step_card(
             "③ 加载扩展",
-            "点“加载已解压的扩展程序”。在弹出窗口顶部的地址栏按 Ctrl+V 粘贴路径并回车，再点“选择文件夹”。"
-            "也可以直接把 extension 文件夹拖进扩展管理页。\n" + str(self.ext_dir),
+            load_tip + "也可以直接把 extension 文件夹拖进扩展管理页。\n" + str(self.ext_dir),
             copy_btn, show_btn))
 
         self.status = StrongBodyLabel()
@@ -132,8 +153,11 @@ class InstallDialog(MessageBoxBase):
     def open_browser(self):
         _, path = self.browsers[self.browser_box.currentIndex()]
         QGuiApplication.clipboard().setText(EXT_URL)
-        subprocess.Popen([path, "--new-window"])
-        self.toast("已复制 " + EXT_URL, "在浏览器地址栏按 Ctrl+V 再回车")
+        if plat.IS_MAC:
+            subprocess.Popen(["open", "-na", path, "--args", "--new-window"])
+        else:
+            subprocess.Popen([path, "--new-window"])
+        self.toast("已复制 " + EXT_URL, f"在浏览器地址栏按 {plat.MOD}V 再回车")
 
     def copy_path(self):
         QGuiApplication.clipboard().setText(str(self.ext_dir))

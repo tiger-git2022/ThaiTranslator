@@ -12,9 +12,11 @@ from PySide6.QtGui import (QAbstractTextDocumentLayout, QColor, QFont, QGuiAppli
                            QPainterPath, QTextCharFormat, QTextCursor, QTextDocument)
 from PySide6.QtWidgets import QApplication, QSizeGrip, QWidget
 from qfluentwidgets import Action, CheckableMenu, FluentIcon as FIF, MenuIndicatorType
-from qframelesswindow import WindowEffect
-
+import plat
 from thaibreak import soft_breaks, strip_breaks
+
+if plat.HAS_BACKDROP:
+    from qframelesswindow import WindowEffect
 
 log = logging.getLogger("overlay")
 FONTS = "'Microsoft YaHei UI','Leelawadee UI','Segoe UI',sans-serif"
@@ -56,14 +58,14 @@ class Overlay(QWidget):
             self.ensure_on_screen()
         else:
             self.default_geometry()
-        self.effect = WindowEffect(self)
+        self.effect = WindowEffect(self) if plat.HAS_BACKDROP else None
         self.blur_on = False
         self.set_click_through(cfg.get("click_through", False))
 
     # --- 毛玻璃 ---
     def apply_blur(self):
         """开启时用 Win11 亚克力模糊做背景，底色和不透明度跟随“背景不透明度”设置。"""
-        if not self.isVisible():
+        if not self.isVisible() or self.effect is None:   # Mac：没有毛玻璃，用纯色半透明底
             return
         hwnd = int(self.winId())
         if self.cfg.get("overlay_blur"):
@@ -178,7 +180,7 @@ class Overlay(QWidget):
             ctx.selections = [s]
         doc.documentLayout().draw(p, ctx)
         p.restore()
-        tip = self.notice or ("已暂停刷新 · Ctrl+C 复制 · Esc 继续" if self.frozen is not None else "")
+        tip = self.notice or (f"已暂停刷新 · {plat.MOD}C 复制 · Esc 继续" if self.frozen is not None else "")
         if tip:
             font = QFont(self.font())
             font.setPixelSize(11)
@@ -322,7 +324,7 @@ class Overlay(QWidget):
         m = CheckableMenu(parent=self, indicatorType=MenuIndicatorType.CHECK)
         sel = self.selected_text()
         if sel:
-            m.addAction(Action(FIF.COPY, "复制选中的文字（Ctrl+C）", triggered=lambda: self._copy(sel)))
+            m.addAction(Action(FIF.COPY, f"复制选中的文字（{plat.MOD}C）", triggered=lambda: self._copy(sel)))
         if self.segments:
             last = self.segments[-1]
             shown = self.visible_text()
@@ -332,7 +334,7 @@ class Overlay(QWidget):
                           Action(FIF.FONT, "复制最新原文", triggered=lambda: self._copy(last.text))])
         if sel or self.segments:
             m.addSeparator()
-        m.addActions([Action(FIF.ZOOM_IN, "字号放大（Ctrl+滚轮）", triggered=lambda: self._font_step(2)),
+        m.addActions([Action(FIF.ZOOM_IN, f"字号放大（{plat.MOD}滚轮）", triggered=lambda: self._font_step(2)),
                       Action(FIF.ZOOM_OUT, "字号缩小", triggered=lambda: self._font_step(-2))])
         m.addSeparator()
         src = Action(FIF.FONT, "显示泰文原文", checkable=True)
@@ -341,7 +343,7 @@ class Overlay(QWidget):
         blur = Action(FIF.BACKGROUND_FILL, "毛玻璃背景", checkable=True)
         blur.setChecked(bool(self.cfg.get("overlay_blur")))
         blur.toggled.connect(lambda v: self.option_changed.emit("overlay_blur", v))
-        m.addActions([src, blur])
+        m.addActions([src, blur] if plat.HAS_BACKDROP else [src])
         m.addSeparator()
         m.addActions([Action(FIF.TRANSPARENT, "鼠标穿透（在托盘取消）",
                              triggered=lambda: self.option_changed.emit("click_through", True)),

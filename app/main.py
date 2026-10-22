@@ -24,7 +24,6 @@ import config
 import log as applog
 from asr import AsrSource, list_loopback_devices
 from bridge import Bridge
-from teams_desktop import TeamsDesktopSource
 from share import RemoteStore, Watcher, discover, lan_addresses, parse_address, seg_to_dict
 from share_dialog import ShareDialog
 from touchpad import tame
@@ -35,9 +34,24 @@ from overlay import Overlay
 from tracker import Tracker
 from transcript_view import TranscriptView
 from translator import Translator, active, list_models, translate
+import plat
+
+if plat.HAS_TEAMS_DESKTOP:
+    from teams_desktop import TeamsDesktopSource
+else:
+    class TeamsDesktopSource(QObject):
+        """Mac 上没有 Teams 桌面版字幕读取（只用浏览器扩展），保留同样的接口。"""
+        captions = Signal(dict)
+        status = Signal(dict)
+
+        def start(self):
+            pass
+
+        def stop(self, wait=0):
+            pass
 
 APP_NAME = "泰语字幕翻译"
-APP_VERSION = "1.5.7"
+APP_VERSION = "1.5.8"
 log = logging.getLogger("app")
 INSTANCE = "ThaiCaption-instance"
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
@@ -293,6 +307,7 @@ class MainWindow(FluentWindow):
         self.source_tabs.addItem("teams", "Teams 字幕", lambda: self.set_source("teams"))
         self.source_tabs.addItem("asr", "语音识别", lambda: self.set_source("asr"))
         self.source_tabs.setCurrentItem(self.cfg.get("source", "teams"))
+        self.source_tabs.setVisible(plat.HAS_ASR)
         head.addWidget(self.source_tabs)
         lay.addLayout(head)
         self.ext_label = BodyLabel()
@@ -445,6 +460,7 @@ class MainWindow(FluentWindow):
         lay.addWidget(g)
 
         g = SettingCardGroup("语音识别")
+        g.setVisible(plat.HAS_ASR)
         asr_model = LineEdit()
         asr_model.setText(cfg.get("asr_model", "whisper-th"))
         asr_model.setFixedWidth(220)
@@ -487,8 +503,10 @@ class MainWindow(FluentWindow):
         self.switch(g, FIF.VIEW, "显示浮窗", "置顶显示最近几条字幕，空白处可拖动、拖右下角改大小，文字可选中复制", "overlay_visible")
         self.switch(g, FIF.FONT, "显示泰文原文", "在译文下方用小字显示原文", "overlay_show_source")
         self.switch(g, FIF.TRANSPARENT, "鼠标穿透", "开启后浮窗不挡鼠标点击；从托盘或这里关闭", "click_through")
-        self.switch(g, FIF.BACKGROUND_FILL, "毛玻璃背景", "模糊浮窗后面的画面，底色深浅由“背景不透明度”控制", "overlay_blur")
-        self.slider(g, FIF.FONT_SIZE, "字号", "也可以在浮窗上按 Ctrl+滚轮", "overlay_font", 12, 60)
+        if plat.HAS_BACKDROP:
+            self.switch(g, FIF.BACKGROUND_FILL, "毛玻璃背景", "模糊浮窗后面的画面，底色深浅由“背景不透明度”控制",
+                        "overlay_blur")
+        self.slider(g, FIF.FONT_SIZE, "字号", f"也可以在浮窗上按 {plat.MOD}滚轮", "overlay_font", 12, 60)
         self.slider(g, FIF.ALIGNMENT, "显示条数", "浮窗里保留最近几条", "overlay_lines", 1, 8)
         self.slider(g, FIF.BRIGHTNESS, "背景不透明度", "%", "overlay_opacity", 20, 100)
         reset = PushSettingCard("复位", FIF.PIN, "浮窗位置", "浮窗跑到屏幕外时点这里")
@@ -522,14 +540,15 @@ class MainWindow(FluentWindow):
         self.theme_box.setCurrentIndex(int(cfg.get("theme", 0)) % len(THEMES))
         self.theme_box.setMinimumWidth(120)
         self.theme_box.currentIndexChanged.connect(self.change_theme)
-        g.addSettingCard(widget_card(FIF.BRUSH, "主题", "浅色 / 深色 / 跟随 Windows 设置", self.theme_box))
+        g.addSettingCard(widget_card(FIF.BRUSH, "主题", "浅色 / 深色 / 跟随系统设置", self.theme_box))
         self.backdrop_box = ComboBox()
         self.backdrop_box.addItems([b[0] for b in BACKDROPS])
         self.backdrop_box.setCurrentIndex(int(cfg.get("backdrop", 0)) % len(BACKDROPS))
         self.backdrop_box.setMinimumWidth(160)
         self.backdrop_box.currentIndexChanged.connect(self.set_backdrop)
-        g.addSettingCard(widget_card(FIF.TRANSPARENT, "背景材质", "Win11 窗口特效；窗口失去焦点时系统会自动显示为纯色",
-                                     self.backdrop_box))
+        backdrop_card = widget_card(FIF.TRANSPARENT, "背景材质", "Win11 窗口特效；窗口失去焦点时系统会自动显示为纯色",
+                                    self.backdrop_box)
+        g.addSettingCard(backdrop_card)
         self.tint_slider = Slider(Qt.Horizontal)
         self.tint_slider.setRange(0, 95)
         self.tint_slider.setValue(int(cfg.get("tint", 55)))
@@ -540,6 +559,9 @@ class MainWindow(FluentWindow):
         self.tint_card = widget_card(FIF.BRIGHTNESS, "亚克力遮罩", "越高文字越清晰，越低越通透",
                                      self.tint_slider, self.tint_value)
         g.addSettingCard(self.tint_card)
+        if not plat.HAS_BACKDROP:
+            backdrop_card.hide()
+            self.tint_card.hide()
         self.slider(g, FIF.SCROLL, "触控板滚动速度", "字幕列表和设置页用触控板滚动时的速度（%），鼠标滚轮不受影响",
                     "touchpad_speed", 10, 100)
         lay.addWidget(g)
@@ -573,6 +595,14 @@ class MainWindow(FluentWindow):
              "开会的这台电脑点“共享字幕”，会弹出二维码。同一个 Wi-Fi / 局域网里的手机或电脑扫码，用浏览器就能看，"
              "不用装任何东西；装了本软件的电脑点“观看共享”会自动找到它，还能用浮窗看。点“停止共享”随时取消。"),
         ]
+        if not plat.HAS_TEAMS_DESKTOP:
+            # Mac 版：只能用浏览器开会；没有语音识别
+            steps = [s for s in steps if not s[0].startswith(("2. Teams 桌面版", "不想用 Teams 字幕"))]
+            steps.insert(1, ("2. 用浏览器开会：先装浏览器扩展（每台电脑只需一次）",
+                             "Mac 版只能读取 Teams 网页版的字幕：用 Chrome 或 Edge 打开 teams.microsoft.com 开会。"
+                             "点“字幕”页上的“安装扩展”，按向导操作。装好后浏览器工具栏的扩展图标显示 ON 表示已连上本软件。"
+                             "Teams 桌面版字幕和语音识别目前只有 Windows 版支持。"))
+            steps = [s for s in steps if not s[0].startswith("用浏览器开会：")]
         for title, body in steps:
             card = SimpleCardWidget()
             c = QVBoxLayout(card)
@@ -681,6 +711,8 @@ class MainWindow(FluentWindow):
         self.apply_backdrop()
 
     def apply_backdrop(self):
+        if not plat.HAS_BACKDROP:
+            return
         kind = BACKDROPS[self.backdrop_box.currentIndex()][1]
         self.tint_card.setEnabled(kind == 3)
         if kind == 0:
@@ -801,6 +833,8 @@ class MainWindow(FluentWindow):
         self._refresh_status()
 
     def refresh_devices(self):
+        if not plat.HAS_ASR:
+            return
         try:
             devs = list_loopback_devices()
         except Exception:  # noqa: BLE001
@@ -995,6 +1029,8 @@ class MainWindow(FluentWindow):
             text = "Teams：已连接（" + "、".join(s.get("host", "") for s in live) + "），当前不在会议中"
         elif self.ext_version():
             text = "Teams：扩展已连接，用 Teams 桌面版或浏览器打开 Teams 入会即可"
+        elif not plat.HAS_TEAMS_DESKTOP:
+            text = "Teams：用 Chrome / Edge 打开 Teams 网页版开会；第一次用要先点“安装扩展”"
         else:
             text = "Teams：用 Teams 桌面版入会即可；用浏览器开会的话，需要先点“安装扩展”"
         self.ext_label.setText("● " + text)
@@ -1080,7 +1116,7 @@ class MainWindow(FluentWindow):
 
     # ---------- 共享 ----------
     def default_share_name(self):
-        return f"{os.environ.get('COMPUTERNAME', '本机')} 的字幕"
+        return f"{plat.computer_name()} 的字幕"
 
     def toggle_share(self):
         if self.server.running:
@@ -1192,7 +1228,8 @@ class MainWindow(FluentWindow):
         self.hide()
         if not self.notified:
             self.notified = True
-            self.tray.showMessage(APP_NAME, "已缩到托盘，字幕翻译继续运行。右键托盘图标可退出。",
+            self.tray.showMessage(APP_NAME, "已缩到菜单栏，字幕翻译继续运行。点菜单栏图标可以退出。" if plat.IS_MAC
+                                  else "已缩到托盘，字幕翻译继续运行。右键托盘图标可退出。",
                                   QSystemTrayIcon.Information, 3000)
 
     def quit_app(self):
@@ -1229,6 +1266,8 @@ def main():
     server.listen(INSTANCE)
 
     cfg = config.load()
+    if not plat.HAS_ASR:
+        cfg["source"] = "teams"   # Mac 版没有语音识别
     applog.setup(bool(cfg.get("debug_log")))
     log.info("========== %s v%s 启动 ==========", APP_NAME, APP_VERSION)
     log.info("程序：%s · Python %s · 配置目录 %s", sys.executable, sys.version.split()[0], config.APP_DIR)

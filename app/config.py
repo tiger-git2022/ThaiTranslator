@@ -1,10 +1,12 @@
-"""配置读写：保存在 %APPDATA%\\ThaiCaption\\config.json。"""
+"""配置读写：保存在 %APPDATA%\\ThaiCaption\\config.json（Mac：~/Library/Application Support/ThaiCaption）。"""
 import json
 import logging
 import os
 from pathlib import Path
 
-APP_DIR = Path(os.environ.get("THAICAPTION_HOME") or Path(os.environ.get("APPDATA") or Path.home()) / "ThaiCaption")
+import plat
+
+APP_DIR = plat.data_dir()
 CONFIG_FILE = APP_DIR / "config.json"
 TRANSCRIPT_DIR = APP_DIR / "transcripts"
 # 本机部署了模型时，自动读取 llama-swap 的密钥，免得手填

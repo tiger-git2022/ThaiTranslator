@@ -1,10 +1,11 @@
 PySide6==6.11.2
 PySide6-Fluent-Widgets==1.11.3
-PyAudioWPatch==0.2.12.8
-onnxruntime==1.30.0
 numpy==2.5.1
-scipy==1.18.1
 qrcode==8.2
 pillow==12.3.0
-comtypes==1.4.17
 pyinstaller==6.22.3
+# 只有 Windows 版用到：Teams 桌面版字幕（UI Automation）、语音识别（录系统声音、断句、重采样）
+comtypes==1.4.17; sys_platform == "win32"
+PyAudioWPatch==0.2.12.8; sys_platform == "win32"
+onnxruntime==1.30.0; sys_platform == "win32"
+scipy==1.18.1; sys_platform == "win32"
