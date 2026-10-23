@@ -690,8 +690,6 @@ class MainWindow(FluentWindow):
     def check_updates(self, manual):
         if self.update_busy:
             return
-        if self.update_info and not manual:
-            return
         self.update_busy = True
         self.act_update.setText("正在检查更新…")
         self._set_update_action()
