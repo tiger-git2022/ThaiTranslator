@@ -46,6 +46,19 @@ jobs:
             Write-Error "标签 ${{ github.ref_name }} 和 app/main.py 里的 APP_VERSION=$v 不一致"
             exit 1
           }
+          # 手动发布时：如果这个版本的标签已经存在且指向别的提交，就不发布，免得同一版本号下换了程序
+          if ("${{ inputs.publish }}" -eq "true") {
+            $refs = git ls-remote origin "refs/tags/v$v" "refs/tags/v$v^{}"
+            if ($refs) {
+              $line = $refs | Where-Object { $_ -match '\^\{\}$' } | Select-Object -First 1
+              if (-not $line) { $line = $refs | Select-Object -First 1 }
+              $sha = ($line -split '\s+')[0]
+              if ($sha -ne "${{ github.sha }}") {
+                Write-Error "标签 v$v 已存在并指向 $sha，不是这次的提交；请先改 APP_VERSION"
+                exit 1
+              }
+            }
+          }
 
       - name: 启动自检
         env:
