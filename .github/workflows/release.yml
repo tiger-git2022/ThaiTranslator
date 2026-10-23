@@ -59,8 +59,9 @@ jobs:
             publish=true
             # 手动发布时：如果这个版本的标签已经存在且指向别的提交，就不发布，免得同一版本号下换了程序
             if [ -n "$refs" ]; then
-              sha=$(echo "$refs" | grep '\^{}$' | head -n1 | cut -f1)
-              [ -n "$sha" ] || sha=$(echo "$refs" | head -n1 | cut -f1)
+              # 附注标签取 ^{} 那行（实际提交），轻量标签只有一行
+              sha=$(echo "$refs" | awk '$2 ~ /\^\{\}$/ {print $1; exit}')
+              [ -n "$sha" ] || sha=$(echo "$refs" | awk 'NR==1 {print $1}')
               if [ "$sha" != "${{ github.sha }}" ]; then
                 echo "::error::标签 v$v 已存在并指向 $sha，不是这次的提交；请先改 APP_VERSION"; exit 1
               fi
