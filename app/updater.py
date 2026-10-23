@@ -135,7 +135,9 @@ def start_install(path):
     args = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", str(script),
             "-ProcId", str(os.getpid()), "-Source", str(source), "-Target", str(APP_DIR), "-Exe", str(EXE),
             "-Log", str(work / "update.log")]
-    subprocess.Popen(args, cwd=str(work), creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    # 重新打开的新程序要当成全新启动，不能沿用旧进程的 PyInstaller 环境（单文件版会去找已删除的解压目录）
+    env = dict(os.environ, PYINSTALLER_RESET_ENVIRONMENT="1")
+    subprocess.Popen(args, cwd=str(work), env=env, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
