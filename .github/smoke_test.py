@@ -59,6 +59,12 @@ def steps():
         win.switchTo(win.help)
         win._refresh_status()
         print("状态栏：", win.ext_label.text())
+        # 自动更新：后台发现新版本时托盘菜单显示“更新到 v…”（不联网，直接喂一个假结果）
+        win._update_checked({"version": "9.9.9", "notes": "", "page": "", "url": None, "sha256": None}, None, False)
+        if win.act_update.text() != "更新到 v9.9.9…":
+            raise RuntimeError(f"发现新版本后托盘菜单文字不对：{win.act_update.text()}")
+        win._update_checked(None, RuntimeError("网络不通"), False)
+        print("自动更新菜单：", win.act_update.text())
         menu = win.tray.contextMenu()   # 托盘菜单能打开；Windows 上是亚克力样式且模糊依赖齐全
         if plat.HAS_BACKDROP:
             from qfluentwidgets.common import image_utils  # noqa: F401  缺 scipy / colorthief 时这里报错
