@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLabel, Q
                                QVBoxLayout, QWidget)
 from qfluentwidgets import (Action, BodyLabel, CaptionLabel, ComboBox, DropDownPushButton, EditableComboBox, FlowLayout,
                             FluentIcon as FIF,
-                            FluentWindow, InfoBar, InfoBarPosition, LineEdit, ProgressBar, SegmentedWidget, ListWidget, MessageBoxBase, NavigationItemPosition,
+                            FluentWindow, InfoBar, InfoBarPosition, LineEdit, MessageBox, ProgressBar, SegmentedWidget, ListWidget, MessageBoxBase, NavigationItemPosition,
                             PasswordLineEdit, PlainTextEdit, PrimaryPushButton, PushButton, PushSettingCard,
                             RoundMenu, ScrollArea, SettingCard, SettingCardGroup, SimpleCardWidget, Slider, SpinBox,
                             StrongBodyLabel, SubtitleLabel, SwitchButton, SystemTrayMenu, Theme, TitleLabel,
@@ -22,6 +22,7 @@ from qfluentwidgets import (Action, BodyLabel, CaptionLabel, ComboBox, DropDownP
 
 import config
 import log as applog
+import updater
 from asr import AsrSource, list_loopback_devices
 from bridge import Bridge
 from share import RemoteStore, Watcher, discover, lan_addresses, parse_address, seg_to_dict
@@ -50,8 +51,15 @@ else:
         def stop(self, wait=0):
             pass
 
+class UpdateSignals(QObject):
+    """检查/下载更新在后台线程里做，结果通过信号回到界面线程。"""
+    checked = Signal(object, object, bool)   # 新版本信息或 None、错误、是否手动
+    progress = Signal(int)
+    downloaded = Signal(object, object)      # 文件路径、错误
+
+
 APP_NAME = "泰语字幕翻译"
-APP_VERSION = "1.5.9"
+APP_VERSION = "1.5.10"
 log = logging.getLogger("app")
 INSTANCE = "ThaiCaption-instance"
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
@@ -241,6 +249,7 @@ class MainWindow(FluentWindow):
                                          selectable=False, position=NavigationItemPosition.BOTTOM,
                                          tooltip="切换深色 / 浅色")
         self._build_tray()
+        self._init_updates()
 
         server.newConnection.connect(lambda: self._on_instance(server))
         self.bridge.captions.connect(lambda body: self._on_captions(body, "ext"))
@@ -649,11 +658,128 @@ class MainWindow(FluentWindow):
                                   triggered=lambda: self.set_option("click_through", not self.cfg["click_through"]))
         menu.addActions([Action(FIF.HOME, "显示主窗口", triggered=self.show_window), self.act_overlay, self.act_through])
         menu.addSeparator()
+        self.act_update = Action(FIF.SYNC, "检查更新…", triggered=lambda: self.check_updates(manual=True))
+        menu.addAction(self.act_update)
+        menu.addSeparator()
         menu.addActions([Action(FIF.CLOSE, "退出", triggered=self.quit_app)])
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(
             lambda r: self.show_window() if r in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick) else None)
         self.tray.show()
+
+    # ---------- 检查更新 ----------
+    def _init_updates(self):
+        """启动 20 秒后检查一次，之后每 12 小时检查一次；发现新版本时托盘弹出提示，点提示或托盘菜单更新。"""
+        self.update_info = None
+        self.update_busy = False
+        self.update_notified = None
+        self.update_signals = UpdateSignals(self)
+        self.update_signals.checked.connect(self._update_checked)
+        self.update_signals.progress.connect(lambda p: self.act_update.setText(f"正在下载更新… {p}%"))
+        self.update_signals.downloaded.connect(self._update_downloaded)
+        self.tray.messageClicked.connect(lambda: self.update_info and self.install_update())
+        QTimer.singleShot(20000, lambda: self.check_updates(manual=False))
+        QTimer(self, interval=12 * 3600 * 1000, timeout=lambda: self.check_updates(manual=False)).start()
+
+    def _set_update_action(self):
+        busy, info = self.update_busy, self.update_info
+        self.act_update.setEnabled(not busy)
+        if not busy:
+            self.act_update.setText(f"更新到 v{info['version']}…" if info else "检查更新…")
+
+    def check_updates(self, manual):
+        if self.update_busy:
+            return
+        if self.update_info and not manual:
+            return
+        self.update_busy = True
+        self.act_update.setText("正在检查更新…")
+        self._set_update_action()
+
+        def work():
+            try:
+                self.update_signals.checked.emit(updater.check(APP_VERSION), None, manual)
+            except Exception as e:  # noqa: BLE001
+                self.update_signals.checked.emit(None, e, manual)
+        threading.Thread(target=work, daemon=True, name="update-check").start()
+
+    def _update_checked(self, info, err, manual):
+        self.update_busy = False
+        if err is not None:
+            log.warning("检查更新失败：%s", err)
+            self._set_update_action()
+            if manual:
+                self.toast(False, "检查更新失败", str(err))
+            return
+        self.update_info = info
+        self._set_update_action()
+        if not info:
+            if manual:
+                self.show_window()
+                self.toast(True, "已经是最新版本", f"当前 v{APP_VERSION}")
+            return
+        log.info("发现新版本 v%s", info["version"])
+        if manual:
+            self.install_update()
+        elif self.update_notified != info["version"]:
+            self.update_notified = info["version"]
+            self.tray.showMessage(f"{APP_NAME}有新版本 v{info['version']}",
+                                  "点这里更新，或者在托盘菜单里选“更新到 v%s”。" % info["version"],
+                                  QSystemTrayIcon.Information, 8000)
+
+    def _ask(self, title, content, yes="确定", no="取消"):
+        self.show_window()
+        box = MessageBox(title, content, self)
+        box.yesButton.setText(yes)
+        box.cancelButton.setText(no)
+        return bool(box.exec())
+
+    def install_update(self):
+        info = self.update_info
+        if not info or self.update_busy:
+            return
+        notes = info["notes"] if len(info["notes"]) <= 1200 else info["notes"][:1200] + "…"
+        if not updater.can_install(info):
+            # Mac 版、源码运行：打开下载页面
+            if self._ask(f"发现新版本 v{info['version']}", f"当前 v{APP_VERSION}。\n\n{notes}\n\n要打开下载页面吗？", "打开下载页面"):
+                QDesktopServices.openUrl(QUrl(info["page"]))
+            return
+        if not self._ask(f"发现新版本 v{info['version']}",
+                         f"当前 v{APP_VERSION}。\n\n{notes}\n\n现在下载并更新吗？更新时软件会先退出（字幕翻译会中断），完成后自动重新打开。",
+                         "下载并更新", "以后再说"):
+            return
+        if not updater.can_write_app_dir():
+            if self._ask("没法自动更新", "软件所在的文件夹不能写入（可能放在了 Program Files 里）。要打开下载页面手动更新吗？", "打开下载页面"):
+                QDesktopServices.openUrl(QUrl(info["page"]))
+            return
+        self.update_busy = True
+        self._set_update_action()
+        self.act_update.setText("正在下载更新… 0%")
+        log.info("开始下载 v%s：%s", info["version"], info["url"])
+
+        def work():
+            try:
+                path = updater.download(info, self.update_signals.progress.emit)
+                self.update_signals.downloaded.emit(path, None)
+            except Exception as e:  # noqa: BLE001
+                self.update_signals.downloaded.emit(None, e)
+        threading.Thread(target=work, daemon=True, name="update-download").start()
+
+    def _update_downloaded(self, path, err):
+        if err is None:
+            try:
+                updater.start_install(path)
+            except Exception as e:  # noqa: BLE001
+                err = e
+        self.update_busy = False
+        self._set_update_action()
+        if err is not None:
+            log.warning("更新失败：%s", err)
+            if self._ask("更新失败", f"{err}\n\n要打开下载页面手动更新吗？", "打开下载页面"):
+                QDesktopServices.openUrl(QUrl(self.update_info["page"]))
+            return
+        log.info("更新文件已准备好，退出软件进行替换")
+        self.quit_app()
 
     # ---------- 选项 ----------
     def set_option(self, key, value):

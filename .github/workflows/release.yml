@@ -92,6 +92,9 @@ jobs:
           python .github/smoke_test.py
           python .github/smoke_test.py --as-mac
 
+      - name: 自动更新自检
+        run: python .github/update_test.py
+
       - name: 打包文件夹版
         run: python build.py
 
