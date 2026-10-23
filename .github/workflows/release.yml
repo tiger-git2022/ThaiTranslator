@@ -1,10 +1,13 @@
 name: 打包发布
 
+# 推送到 main 时：如果 app/main.py 里的 APP_VERSION 还没有对应的 v版本号 标签，就打包并自动发布、创建标签；
+#   已经发布过的版本号什么都不做（不浪费 Mac 打包时间）。
 # 推送 v* 标签（如 v1.5.8）时：分别在 Windows 和 Mac 上打包，再一起发布到 Releases。
 # 手动运行并勾选“发布”时：同样发布，并自动创建 v版本号 标签。
 # 手动运行（不勾选）时：只打包，产物在本次运行的 Artifacts 里下载，不发布。
 on:
   push:
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
     inputs:
@@ -12,6 +15,11 @@ on:
         description: "发布到 Releases（自动创建 v版本号 标签）"
         type: boolean
         default: false
+
+# 同一分支的运行排队执行，后一次能看到前一次刚建的标签，避免同一版本号发布两次
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -21,10 +29,51 @@ env:
   PYTHONIOENCODING: utf-8
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  check:
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.ver.outputs.version }}
+      build: ${{ steps.ver.outputs.build }}
+      publish: ${{ steps.ver.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 读取版本号，决定是否打包、发布
+        id: ver
+        shell: bash
+        run: |
+          v=$(sed -n 's/^APP_VERSION = "\([^"]*\)".*/\1/p' app/main.py | head -n1)
+          if [ -z "$v" ]; then echo "::error::app/main.py 里没有 APP_VERSION"; exit 1; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.ref_type }}" = "tag" ] && [ "${{ github.ref_name }}" != "v$v" ]; then
+            echo "::error::标签 ${{ github.ref_name }} 和 app/main.py 里的 APP_VERSION=$v 不一致"; exit 1
+          fi
+          refs=$(git ls-remote origin "refs/tags/v$v" "refs/tags/v$v^{}") || { echo "::error::查询标签失败"; exit 1; }
+          build=true; publish=false
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            publish=true
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            # 推到 main：没发布过的版本号才打包发布
+            if [ -n "$refs" ]; then echo "v$v 已经发布过，这次不打包"; build=false; else echo "v$v 还没发布，这次自动发布"; publish=true; fi
+          elif [ "${{ inputs.publish }}" = "true" ]; then
+            publish=true
+            # 手动发布时：如果这个版本的标签已经存在且指向别的提交，就不发布，免得同一版本号下换了程序
+            if [ -n "$refs" ]; then
+              # 附注标签取 ^{} 那行（实际提交），轻量标签只有一行
+              sha=$(echo "$refs" | awk '$2 ~ /\^\{\}$/ {print $1; exit}')
+              [ -n "$sha" ] || sha=$(echo "$refs" | awk 'NR==1 {print $1}')
+              if [ "$sha" != "${{ github.sha }}" ]; then
+                echo "::error::标签 v$v 已存在并指向 $sha，不是这次的提交；请先改 APP_VERSION"; exit 1
+              fi
+            fi
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
 
@@ -35,30 +84,6 @@ jobs:
 
       - name: 安装依赖
         run: python -m pip install -r requirements.txt
-
-      - name: 读取版本号
-        id: ver
-        shell: pwsh
-        run: |
-          $v = python -c "import build; print(build.version())"
-          "version=$v" >> $env:GITHUB_OUTPUT
-          if ("${{ github.ref_type }}" -eq "tag" -and "${{ github.ref_name }}" -ne "v$v") {
-            Write-Error "标签 ${{ github.ref_name }} 和 app/main.py 里的 APP_VERSION=$v 不一致"
-            exit 1
-          }
-          # 手动发布时：如果这个版本的标签已经存在且指向别的提交，就不发布，免得同一版本号下换了程序
-          if ("${{ inputs.publish }}" -eq "true") {
-            $refs = git ls-remote origin "refs/tags/v$v" "refs/tags/v$v^{}"
-            if ($refs) {
-              $line = $refs | Where-Object { $_ -match '\^\{\}$' } | Select-Object -First 1
-              if (-not $line) { $line = $refs | Select-Object -First 1 }
-              $sha = ($line -split '\s+')[0]
-              if ($sha -ne "${{ github.sha }}") {
-                Write-Error "标签 v$v 已存在并指向 $sha，不是这次的提交；请先改 APP_VERSION"
-                exit 1
-              }
-            }
-          }
 
       - name: 启动自检
         env:
@@ -85,6 +110,8 @@ jobs:
             out/*.exe
 
   mac:
+    needs: check
+    if: needs.check.outputs.build == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -139,8 +166,8 @@ jobs:
           path: out/*.zip
 
   release:
-    if: github.ref_type == 'tag' || inputs.publish
-    needs: [windows, mac]
+    if: needs.check.outputs.publish == 'true'
+    needs: [check, windows, mac]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -154,14 +181,14 @@ jobs:
         run: |
           ls -lh out
           # 取 CHANGELOG.md 里本版本那一节
-          python3 .github/changelog_section.py "${{ needs.windows.outputs.version }}" out/notes.md
+          python3 .github/changelog_section.py "${{ needs.check.outputs.version }}" out/notes.md
 
       - name: 发布到 Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ needs.windows.outputs.version }}
+          tag_name: v${{ needs.check.outputs.version }}
           target_commitish: ${{ github.sha }}
-          name: 泰语字幕翻译 v${{ needs.windows.outputs.version }}
+          name: 泰语字幕翻译 v${{ needs.check.outputs.version }}
           body_path: out/notes.md
           files: |
             out/*.zip

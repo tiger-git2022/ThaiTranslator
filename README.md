@@ -114,7 +114,7 @@ Teams 桌面版字幕的读取在 `app\teams_desktop.py`：找 `ms-teams.exe` / 
 ### 发布新版本
 
 1. 改 `app\main.py` 里的 `APP_VERSION`，在 `CHANGELOG.md` 顶部加一节 `## v新版本号`，写这次改了什么。
-2. 提交后打标签并推送：`git tag v1.5.8`，再 `git push origin main v1.5.8`。
-3. GitHub Actions 会在 Windows 和 Mac 上分别打包、做启动自检，自动发布到 Releases，说明取自 `CHANGELOG.md`。标签和 `APP_VERSION` 不一致时会直接报错，不发布。
+2. 合并（或推送）到 `main`。GitHub Actions 发现这个版本号还没有 `v版本号` 标签，就会在 Windows 和 Mac 上分别打包、做启动自检，自动发布到 Releases 并打上标签，说明取自 `CHANGELOG.md`。版本号没变时推到 `main` 什么都不做。
+3. 也可以自己推标签 `v新版本号` 来发布；标签和 `APP_VERSION` 不一致时会直接报错，不发布。
 
 只想试打包、不发布时，在 Actions 页面手动运行“打包发布”，产物在那次运行的 Artifacts 里下载。
