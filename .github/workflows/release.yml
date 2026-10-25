@@ -186,6 +186,10 @@ jobs:
           # 取 CHANGELOG.md 里本版本那一节
           python3 .github/changelog_section.py "${{ needs.check.outputs.version }}" out/notes.md
 
+      # 程序从 /releases/latest/download/update.json 检查更新，不走 api.github.com（不登录每小时只能查 60 次）
+      - name: 生成 update.json
+        run: python3 .github/update_manifest.py "${{ needs.check.outputs.version }}" out/notes.md out
+
       - name: 发布到 Releases
         uses: softprops/action-gh-release@v2
         with:
@@ -196,3 +200,4 @@ jobs:
           files: |
             out/*.zip
             out/*.exe
+            out/update.json

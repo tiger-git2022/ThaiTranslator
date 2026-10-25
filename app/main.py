@@ -59,7 +59,7 @@ class UpdateSignals(QObject):
 
 
 APP_NAME = "泰语字幕翻译"
-APP_VERSION = "1.5.10"
+APP_VERSION = "1.5.11"
 log = logging.getLogger("app")
 INSTANCE = "ThaiCaption-instance"
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))

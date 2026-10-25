@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -42,31 +43,66 @@ def parse(v):
     return tuple(int(x or 0) for x in m.groups()) if m else None
 
 
-def _get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "ThaiCaption-updater", "Accept": "application/vnd.github+json"})
+MANIFEST_URL = f"https://github.com/{REPO}/releases/latest/download/update.json"
+API_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
+
+
+def _get(url, accept="application/octet-stream"):
+    req = urllib.request.Request(url, headers={"User-Agent": "ThaiCaption-updater", "Accept": accept})
     return urllib.request.urlopen(req, timeout=TIMEOUT)
 
 
 def check(current):
-    """有比 current 新的版本就返回 dict(version, notes, page, url, sha256)，否则返回 None。网络出错时抛异常。"""
-    with _get(f"https://api.github.com/repos/{REPO}/releases/latest") as r:
-        data = json.load(r)
-    tag = data.get("tag_name") or ""
+    """有比 current 新的版本就返回 dict(version, notes, page, url, sha256)，否则返回 None。网络出错时抛异常。
+
+    先读 Release 里的 update.json（和下载安装包一样没有次数限制）。v1.5.10 及以前的 Release 没有这个文件，
+    才退回 api.github.com；那个接口不登录时每个 IP 每小时只能查 60 次。"""
+    data = _manifest() or _from_api()
+    tag = data["tag_name"]
     latest, cur = parse(tag), parse(current) or (0, 0, 0)
     if not latest or latest <= cur:
         return None
     version = tag.lstrip("vV")
-    info = {"version": version, "notes": data.get("body") or "", "page": data.get("html_url") or RELEASES_URL,
-            "url": None, "sha256": None}
+    info = {"version": version, "notes": data["notes"], "page": data["page"] or RELEASES_URL, "url": None, "sha256": None}
     if mode():
-        want = asset_name(version)
-        for a in data.get("assets") or []:
-            if a.get("name") == want:
-                digest = a.get("digest") or ""
-                info["url"] = a.get("browser_download_url")
-                info["sha256"] = digest[7:].lower() if digest.startswith("sha256:") else None
-                break
+        asset = data["assets"].get(asset_name(version))
+        if asset:
+            info["url"] = f"https://github.com/{REPO}/releases/download/{tag}/{asset_name(version)}"
+            info["sha256"] = asset["sha256"]
     return info
+
+
+def _manifest():
+    """读 update.json；最新 Release 里没有这个文件时返回 None。"""
+    try:
+        with _get(MANIFEST_URL, "application/json") as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+    assets = {}
+    for name, a in (data.get("assets") or {}).items():
+        sha = str(a.get("sha256") or "").lower()
+        assets[name] = {"sha256": sha if len(sha) == 64 else None}
+    return {"tag_name": data.get("tag_name") or "", "notes": data.get("body") or "",
+            "page": data.get("page") or "", "assets": assets}
+
+
+def _from_api():
+    try:
+        with _get(API_URL, "application/vnd.github+json") as r:
+            data = json.load(r)
+    except urllib.error.HTTPError as e:
+        if e.code in (403, 429):
+            raise RuntimeError("GitHub 访问次数暂时用完了，请过一小时再检查更新") from e
+        raise
+    assets = {}
+    for a in data.get("assets") or []:
+        digest = a.get("digest") or ""
+        assets[a.get("name")] = {"sha256": digest[7:].lower() if digest.startswith("sha256:") else None}
+    return {"tag_name": data.get("tag_name") or "", "notes": data.get("body") or "",
+            "page": data.get("html_url") or "", "assets": assets}
 
 
 def can_install(info):
