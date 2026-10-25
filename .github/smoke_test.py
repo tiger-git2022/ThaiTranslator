@@ -73,6 +73,14 @@ def steps():
         menu.exec(win.geometry().center())
         QTimer.singleShot(300, menu.close)
         print("托盘菜单：", type(menu).__name__)
+        # 菜单项够宽，文字不被截断（下载进度是最长的一项）
+        import menu_width
+        win.act_update.setText("正在下载更新 100%…")
+        for i in range(menu.view.count()):
+            item = menu.view.item(i)
+            if item.text() and item.sizeHint().width() < menu_width.needed_width(menu, item.text()):
+                raise RuntimeError(f"托盘菜单项太窄：{item.text()!r}")
+        win._update_checked(None, RuntimeError("网络不通"), False)
     except Exception:  # noqa: BLE001
         errors.append(traceback.format_exc())
 
