@@ -22,6 +22,7 @@ from qfluentwidgets import (Action, BodyLabel, CaptionLabel, ComboBox, DropDownP
 
 import config
 import log as applog
+import menu_width
 import updater
 from asr import AsrSource, list_loopback_devices
 from bridge import Bridge
@@ -36,6 +37,8 @@ from tracker import Tracker
 from transcript_view import TranscriptView
 from translator import Translator, active, list_models, translate
 import plat
+
+menu_width.install()   # 菜单项宽度按实际字号计算，长菜单项不被截断
 
 if plat.HAS_TEAMS_DESKTOP:
     from teams_desktop import TeamsDesktopSource
